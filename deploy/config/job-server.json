@@ -1,0 +1,658 @@
+{
+  "Description": "VPC that contains an Elastic Beanstalk Worker Tier that connects to an RDS Instance.",
+  "Parameters": {
+    "AWSAccountNumber": {
+      "Default": "AWS ACCOUNT NUMBER HERE",
+      "Type": "String"
+    },
+    "AWSRegion": {
+      "Default": "us-west-2",
+      "Type": "String"
+    },
+    "EC2KeyPairName": {
+      "Default": "EC2 KEY PAIR NAME HERE",
+      "Type": "String"
+    },
+    "EbAppName": {
+      "Default": "job-server",
+      "Type": "String"
+    },
+    "EbEnvName": {
+      "Default": "test",
+      "Type": "String"
+    },
+    "EbEnvDescription": {
+      "Default": "job server",
+      "Type": "String"
+    },
+    "EBHTTPPath": {
+      "Default": "/job/run",
+      "Type": "String"
+    },
+    "EbAsgMinSize": {
+      "Default": "1",
+      "Type": "String"
+    },
+    "EbAsgMaxSize": {
+      "Default": "2",
+      "Type": "String"
+    },
+    "EbAsgInstanceType": {
+      "Default": "m3.medium",
+      "Type": "String"
+    },
+    "JobQueueName": {
+      "Default": "job-queue",
+      "Type": "String"
+    },
+    "DeadLetterQueueName": {
+      "Default": "job-dead-letter-queue",
+      "Type": "String"
+    },
+    "JobQueueMaxRetry": {
+      "Default": "3",
+      "Type": "String"
+    },
+    "JobQueueInactivityTimeout": {
+      "Default": "900",
+      "Type": "String"
+    },
+    "JobQueueVisibilityTimeout": {
+      "Default": "930",
+      "Type": "String"
+    },
+    "DBInstanceClass": {
+      "Default": "db.m4.large",
+      "Type": "String"
+    },
+    "DBInstanceIdentifier": {
+      "Default": "job-server-database",
+      "Type": "String"
+    },
+    "DBMasterUser": {
+      "Default": "master_user",
+      "Type": "String"
+    },
+    "DBMasterPassword": {
+      "Default": "super_secret_master_password",
+      "Type": "String"
+    },
+    "VpcCidrBlock": {
+      "Default": "10.0.0.0/16",
+      "Type": "String"
+    },
+    "AppCidrBlock": {
+      "Default": "10.0.0.64/26",
+      "Type": "String"
+    },
+    "DBCidrBlockA": {
+      "Default": "10.0.0.128/26",
+      "Type": "String"
+    },
+    "DBCidrBlockB": {
+      "Default": "10.0.64.0/26",
+      "Type": "String"
+    },
+    "SecurityGroupsEnabled": {
+      "Default": "true",
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "JobQueuePolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Properties": {
+        "Queues": [{
+          "Ref": "JobQueue"
+        }, {
+          "Ref": "DeadLetterQueue"
+        }],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Id": "JobQueuePolicy",
+          "Statement": [
+            {
+              "Sid": "job-server",
+              "Effect": "Allow",
+              "Action": [ "sqs:*" ],
+              "Resource": "*",
+              "Principal": {
+                "AWS": { "Fn::GetAtt": [ "EBRole", "Arn" ] }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "EBRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {
+              "Service": ["ec2.amazonaws.com"]
+            },
+            "Action": ["sts:AssumeRole"]
+          }]
+        },
+        "Policies": [{
+          "PolicyName": "WriteLogs",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "logs:DescribeLogStreams"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [ "LogGroup", "Arn" ]
+              }
+            }]
+          }
+        }, {
+          "PolicyName": "CronTableAccess",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:*"
+              ],
+              "Resource": [{
+                "Fn::Join": [
+                  ":",[
+                    "arn:aws:dynamodb:*",
+                    {"Ref": "AWSAccountNumber"},
+                    "table/dynamo-job-cron"
+                  ]
+                ]
+              }]
+            }]
+          }
+        }, {
+          "PolicyName": "JobQueueAccess",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "sqs:*"
+              ],
+              "Resource": [{
+                "Fn::GetAtt": [ "JobQueue", "Arn" ]
+              }]
+            }]
+          }
+        }]
+      }
+    },
+    "EBInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [{
+          "Ref": "EBRole"
+        }]
+      }
+    },
+    "EbApp": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "ApplicationName": {
+          "Ref": "EbAppName"
+        },
+        "Description": "ElasticBeanstalk Worker Tier"
+      }
+    },
+    "EbEnv": {
+      "Type": "AWS::ElasticBeanstalk::Environment",
+      "Properties": {
+        "ApplicationName": {
+          "Ref": "EbApp"
+        },
+        "EnvironmentName": {
+          "Ref": "EbEnvName"
+        },
+        "OptionSettings": [{
+          "Namespace": "aws:elasticbeanstalk:sqsd",
+          "OptionName": "MaxRetries",
+          "Value": {
+            "Ref": "JobQueueMaxRetry"
+          }
+        }, {
+          "Namespace": "aws:elasticbeanstalk:sqsd",
+          "OptionName": "WorkerQueueURL",
+          "Value": {
+            "Ref": "JobQueue"
+          }
+        }, {
+          "Namespace": "aws:elasticbeanstalk:sqsd",
+          "OptionName": "InactivityTimeout",
+          "Value": {
+            "Ref": "JobQueueInactivityTimeout"
+          }
+        }, {
+          "Namespace": "aws:elasticbeanstalk:sqsd",
+          "OptionName": "VisibilityTimeout",
+          "Value": {
+            "Ref": "JobQueueVisibilityTimeout"
+          }
+        }, {
+          "Namespace": "aws:elasticbeanstalk:sqsd",
+          "OptionName": "HttpPath",
+          "Value": {
+            "Ref": "EBHTTPPath"
+          }
+        }, {
+          "Namespace": "aws:autoscaling:asg",
+          "OptionName": "MaxSize",
+          "Value": {
+            "Ref": "EbAsgMaxSize"
+          }
+        }, {
+          "Namespace": "aws:autoscaling:asg",
+          "OptionName": "MinSize",
+          "Value": {
+            "Ref": "EbAsgMinSize"
+          }
+        }, {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "EC2KeyName",
+          "Value": {
+            "Ref": "EC2KeyPairName"
+          }
+        }, {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "InstanceType",
+          "Value": {
+            "Ref": "EbAsgInstanceType"
+          }
+        }, {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "BlockDeviceMappings"
+        }, {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "IamInstanceProfile",
+          "Value": {
+            "Ref": "EBInstanceProfile"
+          }
+        }, {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "RootVolumeSize",
+          "Value": "10"
+        }, {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "RootVolumeType",
+          "Value": "gp2"
+        }, {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "SSHSourceRestriction",
+          "Value": {
+            "Fn::Join": [
+              "", [
+                "tcp, 22, 22, ", {
+                  "Ref": "EC2SecurityGroup"
+                }
+              ]
+            ]
+          }
+        }, {
+          "Namespace": "aws:autoscaling:launchconfiguration",
+          "OptionName": "SecurityGroups",
+          "Value": {
+            "Ref": "EC2SecurityGroup"
+          }
+        }, {
+          "Namespace": "aws:autoscaling:updatepolicy:rollingupdate",
+          "OptionName": "MaxBatchSize",
+          "Value": "1"
+        }, {
+          "Namespace": "aws:autoscaling:updatepolicy:rollingupdate",
+          "OptionName": "MinInstancesInService",
+          "Value": "1"
+        }, {
+          "Namespace": "aws:autoscaling:updatepolicy:rollingupdate",
+          "OptionName": "RollingUpdateEnabled",
+          "Value": "true"
+        }, {
+          "Namespace": "aws:autoscaling:updatepolicy:rollingupdate",
+          "OptionName": "RollingUpdateType",
+          "Value": "Time"
+        }, {
+          "Namespace": "aws:autoscaling:updatepolicy:rollingupdate",
+          "OptionName": "Timeout",
+          "Value": "PT30M"
+        }, {
+          "Namespace": "aws:cloudformation:template:parameter",
+          "OptionName": "DockerProxyServer",
+          "Value": "nginx"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:command",
+          "OptionName": "BatchSize",
+          "Value": "30"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:command",
+          "OptionName": "BatchSizeType",
+          "Value": "percentage"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:command",
+          "OptionName": "Timeout",
+          "Value": "600"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:control",
+          "OptionName": "DefaultSSHPort",
+          "Value": "22"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:control",
+          "OptionName": "LaunchTimeout",
+          "Value": "0"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:control",
+          "OptionName": "LaunchType",
+          "Value": "Migration"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:control",
+          "OptionName": "RollbackLaunchOnFailure",
+          "Value": "true"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:hostmanager",
+          "OptionName": "LogPublicationControl",
+          "Value": "true"
+        }, {
+          "Namespace": "aws:elasticbeanstalk:monitoring",
+          "OptionName": "Automatically Terminate Unhealthy Instances",
+          "Value": "true"
+        }, {
+          "Namespace": "aws:ec2:vpc",
+          "OptionName": "VPCId",
+          "Value": {
+            "Ref": "VPC"
+          }
+        }, {
+          "Namespace": "aws:ec2:vpc",
+          "OptionName": "Subnets",
+          "Value": {
+            "Ref": "AppSubnet"
+          }
+        }, {
+          "Namespace": "aws:ec2:vpc",
+          "OptionName": "ELBSubnets",
+          "Value": {
+            "Ref": "AppSubnet"
+          }
+        }, {
+          "Namespace": "aws:ec2:vpc",
+          "OptionName": "AssociatePublicIpAddress",
+          "Value": "true"
+        }],
+        "Description": {
+          "Ref": "EbEnvDescription"
+        },
+        "Tier": {
+          "Type": "SQS/HTTP",
+          "Name": "Worker"
+        },
+        "SolutionStackName": "64bit Amazon Linux 2015.09 v2.0.8 running Docker 1.9.1"
+      }
+    },
+    "EC2SecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress": [{
+          "ToPort": 65535,
+          "FromPort": 0,
+          "CidrIp": "0.0.0.0/0",
+          "IpProtocol": "tcp"
+        }],
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupDescription": "Open SSH"
+      }
+    },
+    "LogGroup": {
+      "DeletionPolicy": "Retain",
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "RetentionInDays": 14,
+        "LogGroupName": {
+          "Fn::Join": [
+            "-", [{
+              "Ref": "EbEnvName"
+            },
+              "logs"
+            ]
+          ]
+        }
+      }
+    },
+    "DBInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "PubliclyAccessible": "true",
+        "MasterUsername": {
+          "Ref": "DBMasterUser"
+        },
+        "VPCSecurityGroups": [{
+          "Ref": "RDSSecurityGroup"
+        }],
+        "EngineVersion": "9.5.2",
+        "DBSubnetGroupName": {
+          "Ref": "DBSubnetGroup"
+        },
+        "BackupRetentionPeriod": "7",
+        "Engine": "postgres",
+        "MultiAZ": "true",
+        "AllowMajorVersionUpgrade": "false",
+        "MasterUserPassword": {
+          "Ref": "DBMasterPassword"
+        },
+        "AutoMinorVersionUpgrade": "true",
+        "Iops": "1000",
+        "AllocatedStorage": "100",
+        "DBInstanceClass": {
+          "Ref": "DBInstanceClass"
+        },
+        "DBName": "job_server_database",
+        "DBInstanceIdentifier": {
+          "Ref": "DBInstanceIdentifier"
+        }
+      }
+    },
+    "RDSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress": [{
+          "ToPort": 65535,
+          "FromPort": 0,
+          "CidrIp": "0.0.0.0/0",
+          "IpProtocol": "tcp"
+        }, {
+          "SourceSecurityGroupId": {
+            "Ref": "EC2SecurityGroup"
+          },
+          "FromPort": 5432,
+          "ToPort": 5432,
+          "IpProtocol": "tcp"
+        }],
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupDescription": "Open SSH"
+      }
+    },
+    "JobQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "DeadLetterQueue",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": {
+            "Ref": "JobQueueMaxRetry"
+          }
+        },
+        "ReceiveMessageWaitTimeSeconds": 0,
+        "DelaySeconds": 30,
+        "VisibilityTimeout": 30,
+        "MessageRetentionPeriod": 1209600,
+        "QueueName": {
+          "Ref": "JobQueueName"
+        },
+        "MaximumMessageSize": 262144
+      }
+    },
+    "DeadLetterQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "ReceiveMessageWaitTimeSeconds": 0,
+        "DelaySeconds": 30,
+        "VisibilityTimeout": 30,
+        "MessageRetentionPeriod": 1209600,
+        "QueueName": {
+          "Ref": "DeadLetterQueueName"
+        },
+        "MaximumMessageSize": 262144
+      }
+    },
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "VpcCidrBlock"
+        },
+        "EnableDnsSupport": "true",
+        "InstanceTenancy": "default",
+        "EnableDnsHostnames": "true"
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {}
+    },
+    "InternetGatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "RouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "Route": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      },
+      "DependsOn": "InternetGatewayAttachment"
+    },
+    "AppSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "AppCidrBlock"
+        },
+        "AvailabilityZone": "us-west-2a"
+      }
+    },
+    "DBSubnetA": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "DBCidrBlockA"
+        },
+        "AvailabilityZone": "us-west-2b"
+      }
+    },
+    "DBSubnetB": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "DBCidrBlockB"
+        },
+        "AvailabilityZone": "us-west-2c"
+      }
+    },
+    "AppSubnetAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "AppSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      }
+    },
+    "DBSubnetAssociationA": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "DBSubnetA"
+        },
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      }
+    },
+    "DBSubnetAssociationB": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "DBSubnetB"
+        },
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      }
+    },
+    "DBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "SubnetIds": [{
+          "Ref": "DBSubnetA"
+        }, {
+          "Ref": "DBSubnetB"
+        }],
+        "DBSubnetGroupDescription": "Subnet Group for database"
+      }
+    }
+  },
+  "Metadata": {},
+  "Mappings": {},
+  "Outputs": {},
+  "Conditions": {}
+}

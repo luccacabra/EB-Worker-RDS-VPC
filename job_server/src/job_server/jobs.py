@@ -14,7 +14,7 @@ class BaseJob:
         pass
 
 
-def CronJob(BaseJob):
+class CronJob(BaseJob):
     def __init__(self, session):
         super(CronJob, self).__init__(session)
 
@@ -24,7 +24,7 @@ def CronJob(BaseJob):
         ))
 
 
-def InsertJob(BaseJob):
+class InsertJob(BaseJob):
     def __init__(self, session):
         super(InsertJob, self).__init__(session)
 
