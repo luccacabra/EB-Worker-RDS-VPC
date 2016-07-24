@@ -1,0 +1,11 @@
+aws:
+  region_name: 'us-east-1'
+  sqs:
+    queue_name: 'my-queue-name'
+database:
+  engine: 'postgres'
+  user: 'job_server_user'
+  password: 'job_server_password'
+  host: ''
+  port: ''
+  database_name: 'job_server'

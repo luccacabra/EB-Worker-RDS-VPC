@@ -1,0 +1,6 @@
+version: 1
+cron:
+ # Cron Job Runs Every 5 Minutes
+ - name: "cron-job"
+   url: "/job/post/CronJob"
+   schedule: "*/5 * * * *"
