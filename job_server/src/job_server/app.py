@@ -1,3 +1,4 @@
+import os
 import yaml
 
 import tornado.ioloop
@@ -20,7 +21,10 @@ def job_server(context):
 
 
 if __name__ == "__main__":
-    context = JobServerContext(yaml.load(file('config.yaml', 'r')))
+
+    context = JobServerContext(yaml.load(file(os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                                           'config.yaml'),
+                                              'r')))
     init_db(context)
     app = job_server(context)
     app.listen(8080)

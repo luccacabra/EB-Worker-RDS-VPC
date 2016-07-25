@@ -1,11 +1,11 @@
 aws:
-  region_name: 'us-east-1'
+  region_name: 'us-west-2'
   sqs:
-    queue_name: 'my-queue-name'
+    queue_name: 'job-queue'
 database:
   engine: 'postgres'
-  user: 'job_server_user'
-  password: 'job_server_password'
-  host: ''
-  port: ''
+  user: 'master_user'
+  password: 'super_secret_master_password'
+  host: 'YOUR DB HOST HERE'
+  port: '5432'
   database_name: 'job_server'
