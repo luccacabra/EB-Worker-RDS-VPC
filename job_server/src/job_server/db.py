@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy_utils import create_database, database_exists
 
 BASE = declarative_base()
-TABLE_ID = Sequence('table_id_seq', start=1)
+TABLE_ID = Sequence('table_id_seq', start=1000)
 
 class JobServerData(BASE):
     __tablename__ = 'job_server_data'
@@ -16,8 +16,5 @@ def init_db(context):
     if not database_exists(context.engine.url):
         create_database(context.engine.url)
 
-        # Open connection
-        connection = context.sql()
-
         # Create Tables
-        BASE.metadata.create_all(connection)
+        BASE.metadata.create_all(context.engine)

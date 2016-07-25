@@ -11,12 +11,11 @@ class JobServerContext:
                                              endpoint_url=self.aws_session.client('sqs')
                                              .get_queue_url(QueueName=config['aws']['sqs']['queue_name'])['QueueUrl']) \
             .get_queue_by_name(QueueName=config['aws']['sqs']['queue_name'])
-
         self.engine = create_engine(str(URL(config['database']['engine'],
-                                        username=config['database']['user'],
-                                        password=config['database']['password'],
-                                        host=config['database']['host'],
-                                        port=config['database']['port'],
-                                        database=config['database']['database_name'],)))
+                                            username=config['database']['user'],
+                                            password=config['database']['password'],
+                                            host=config['database']['host'],
+                                            port=config['database']['port'],
+                                            database=config['database']['database_name'])))
         self.sql = self.engine.connect
         self.session_factory = sessionmaker(bind=self.engine)

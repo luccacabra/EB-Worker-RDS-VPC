@@ -3,9 +3,9 @@ aws:
   sqs:
     queue_name: 'job-queue'
 database:
-  engine: 'postgres'
+  engine: 'postgresql'
   user: 'master_user'
   password: 'super_secret_master_password'
   host: 'YOUR DB HOST HERE'
   port: '5432'
-  database_name: 'job_server'
+  database_name: 'job_server_database'
