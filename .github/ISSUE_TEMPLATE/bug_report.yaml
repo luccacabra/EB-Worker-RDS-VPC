@@ -1,42 +1,62 @@
 name: Bug Report
 description: File a bug report
 title: "[Bug]: "
-labels: [bug, backlog]
+labels: [bug, triage]
+assignees:
+  - octocat
 body:
   - type: markdown
     attributes:
       value: |
         Thanks for taking the time to fill out this bug report!
-  - type: textarea
-    id: summary
+  - type: input
+    id: contact
     attributes:
-      label: Summary
-      description: High level summary of the bug
+      label: Contact Details
+      description: How can we get in touch with you if we need more info?
+      placeholder: ex. email@example.com
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also tell us, what did you expect to happen?
+      placeholder: Tell us what you see!
+      value: "A bug happened!"
     validations:
       required: true
-  - type: textarea
-    id: expected-behavior
+  - type: dropdown
+    id: version
     attributes:
-      label: Expected Behavior
-      description: What were you expecting to happen?
+      label: Version
+      description: What version of our software are you running?
+      options:
+        - 1.0.2 (Default)
+        - 1.0.3 (Edge)
     validations:
       required: true
-  - type: textarea
-    id: observed-behavior
+  - type: dropdown
+    id: browsers
     attributes:
-      label: Observed Behavior
-      description: What actually happened?
-    validations:
-      required: true
+      label: What browsers are you seeing the problem on?
+      multiple: true
+      options:
+        - Firefox
+        - Chrome
+        - Safari
+        - Microsoft Edge
   - type: textarea
-    id: steps-to-reproduce
+    id: logs
     attributes:
-      label: Steps to Reproduce
-      description: Please provide a detailed set of instructions on how to reproduce the bug
-    validations:
-      required: true
-  - type: textarea
-    id: additional-context
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+  - type: checkboxes
+    id: terms
     attributes:
-      label: Additional Context
-      description: Any additional information that might be useful in helping us debug this issue?
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://example.com)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
